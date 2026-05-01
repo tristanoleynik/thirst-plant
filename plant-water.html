@@ -1,0 +1,480 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>thirst plant</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=VT323&family=Press+Start+2P&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'VT323', monospace;
+    background: #1a0a2e;
+    color: #33ff33;
+    min-height: 100dvh;
+    padding: 0;
+    background-image:
+      repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,255,0,0.015) 2px, rgba(0,255,0,0.015) 4px);
+  }
+
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background:
+      radial-gradient(1px 1px at 10% 20%, #ffffff44, transparent),
+      radial-gradient(1px 1px at 30% 70%, #ffffff33, transparent),
+      radial-gradient(1px 1px at 50% 10%, #ffffff22, transparent),
+      radial-gradient(1px 1px at 70% 80%, #ffffff44, transparent),
+      radial-gradient(1px 1px at 90% 40%, #ffffff33, transparent),
+      radial-gradient(1px 1px at 15% 90%, #ffffff22, transparent),
+      radial-gradient(1px 1px at 85% 15%, #ffffff44, transparent),
+      radial-gradient(1px 1px at 45% 55%, #ffffff22, transparent),
+      radial-gradient(1px 1px at 65% 35%, #ffffff33, transparent),
+      radial-gradient(1px 1px at 25% 45%, #ffffff22, transparent);
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .page { position: relative; z-index: 1; }
+
+  .header {
+    text-align: center;
+    padding: 20px 16px 8px;
+    border-bottom: 2px dashed #1a8a1a;
+    margin: 0 12px;
+  }
+  .header h1 {
+    font-family: 'Press Start 2P', monospace;
+    font-size: 20px;
+    color: #00ffff;
+    text-shadow: 2px 2px 0 #000, 0 0 10px rgba(0,255,255,0.4);
+    letter-spacing: 0.05em;
+    margin-bottom: 4px;
+  }
+  .header .tagline {
+    font-size: 16px;
+    color: #1a8a1a;
+  }
+  .status-row {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 8px;
+    margin-top: 8px;
+  }
+  .status-dot {
+    width: 8px; height: 8px;
+    background: #ff3333;
+    display: inline-block;
+    animation: blink 1.2s step-end infinite;
+  }
+  .status-dot.on { background: #33ff33; }
+  .status-text { font-size: 18px; color: #1a8a1a; }
+  .status-text.on { color: #33ff33; }
+  @keyframes blink { 50% { opacity: 0.3; } }
+
+  .connect-btn {
+    display: block;
+    width: calc(100% - 24px);
+    margin: 14px 12px;
+    padding: 10px;
+    background: #000;
+    border: 2px solid #ff00ff;
+    color: #ff00ff;
+    font-family: 'VT323', monospace;
+    font-size: 22px;
+    cursor: pointer;
+    text-shadow: 0 0 8px rgba(255,0,255,0.5);
+  }
+  .connect-btn:active { background: #ff00ff; color: #000; }
+
+  .section {
+    margin: 12px;
+    border: 2px solid #33ff33;
+    background: rgba(0,0,0,0.7);
+  }
+  .section-header {
+    background: #33ff33;
+    color: #000;
+    padding: 4px 8px;
+    font-size: 20px;
+    font-weight: bold;
+    letter-spacing: 0.05em;
+  }
+  .section-header::before { content: '> '; }
+
+  .row {
+    padding: 10px;
+    display: flex;
+    gap: 8px;
+    align-items: flex-end;
+    flex-wrap: wrap;
+  }
+  .field {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    flex: 1;
+    min-width: 0;
+  }
+  .field label {
+    font-size: 16px;
+    color: #ffff00;
+  }
+  .field input, .field select {
+    background: #000;
+    border: 1px solid #1a8a1a;
+    padding: 6px 8px;
+    color: #33ff33;
+    font-family: 'VT323', monospace;
+    font-size: 20px;
+    outline: none;
+    width: 100%;
+    -webkit-appearance: none;
+    appearance: none;
+  }
+  .field input::placeholder { color: #0f5f0f; }
+  .field input:focus, .field select:focus {
+    border-color: #33ff33;
+    box-shadow: 0 0 6px rgba(51,255,51,0.3);
+  }
+  .field select {
+    cursor: pointer;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10'%3E%3Cpath d='M0 3L5 8L10 3' fill='%2333ff33'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 8px center;
+    padding-right: 24px;
+  }
+
+  .action-btn {
+    padding: 6px 14px;
+    background: #000;
+    border: 2px solid #33ff33;
+    color: #33ff33;
+    font-family: 'VT323', monospace;
+    font-size: 20px;
+    cursor: pointer;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+  .action-btn:active { background: #33ff33; color: #000; }
+  .action-btn:disabled { border-color: #1a8a1a; color: #1a8a1a; cursor: not-allowed; }
+
+  .progress-area { padding: 0 10px 10px; display: none; }
+  .progress-area.active { display: block; }
+  .progress-bar-bg {
+    height: 12px;
+    background: #000;
+    border: 1px solid #1a8a1a;
+    overflow: hidden;
+    margin-bottom: 4px;
+  }
+  .progress-bar-fill {
+    height: 100%;
+    width: 0%;
+    background-image: repeating-linear-gradient(90deg, #33ff33 0px, #33ff33 6px, #000 6px, #000 8px);
+    background-size: 8px 100%;
+    transition: width 0.3s;
+  }
+  .progress-text { font-size: 16px; color: #1a8a1a; text-align: center; }
+
+  .schedule-list { border-top: 1px dashed #1a8a1a; }
+  .schedule-entry {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 10px;
+    border-bottom: 1px dashed #1a8a1a;
+    gap: 8px;
+  }
+  .schedule-entry:last-child { border-bottom: none; }
+  .entry-info { flex: 1; min-width: 0; }
+  .entry-main { font-size: 20px; color: #33ff33; }
+  .entry-sub { font-size: 16px; color: #1a8a1a; }
+  .entry-disabled .entry-main,
+  .entry-disabled .entry-sub { color: #1a8a1a; opacity: 0.5; }
+  .entry-actions { display: flex; gap: 6px; align-items: center; flex-shrink: 0; }
+
+  .toggle-btn {
+    font-family: 'VT323', monospace;
+    font-size: 16px;
+    padding: 2px 8px;
+    background: #000;
+    border: 1px solid #1a8a1a;
+    color: #33ff33;
+    cursor: pointer;
+  }
+  .toggle-btn.off { color: #1a8a1a; }
+  .toggle-btn:active { background: #33ff33; color: #000; }
+
+  .del-btn {
+    font-family: 'VT323', monospace;
+    font-size: 18px;
+    padding: 2px 8px;
+    background: #000;
+    border: 1px solid #1a8a1a;
+    color: #ff3333;
+    cursor: pointer;
+  }
+  .del-btn:active { background: #ff3333; color: #000; }
+
+  .sync-row { padding: 10px; border-top: 1px dashed #1a8a1a; }
+  .sync-btn {
+    width: 100%;
+    padding: 8px;
+    background: #000;
+    border: 2px solid #00ffff;
+    color: #00ffff;
+    font-family: 'VT323', monospace;
+    font-size: 22px;
+    cursor: pointer;
+    text-shadow: 0 0 6px rgba(0,255,255,0.3);
+  }
+  .sync-btn:active { background: #00ffff; color: #000; }
+  .sync-btn:disabled { border-color: #0a5a5a; color: #0a5a5a; text-shadow: none; cursor: not-allowed; }
+
+  .log-area {
+    margin: 12px;
+    border: 1px solid #1a8a1a;
+    background: rgba(0,0,0,0.8);
+    max-height: 120px;
+    overflow-y: auto;
+    padding: 6px 8px;
+    font-size: 15px;
+    color: #1a8a1a;
+    line-height: 1.6;
+  }
+  .log-g { color: #33ff33; }
+  .log-y { color: #ffff00; }
+  .log-r { color: #ff3333; }
+
+  .footer {
+    text-align: center;
+    padding: 20px 12px 30px;
+    font-size: 15px;
+    color: #1a8a1a;
+  }
+  .counter {
+    display: inline-block;
+    background: #000;
+    border: 1px solid #1a8a1a;
+    padding: 2px 10px;
+    font-size: 18px;
+    color: #ffff00;
+    letter-spacing: 0.1em;
+    margin-top: 4px;
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+<div class="header">
+  <h1>thirst plant</h1>
+  <div class="tagline">~ water delivery system ~</div>
+  <div class="status-row">
+    <span class="status-dot" id="statusDot"></span>
+    <span class="status-text" id="statusText">offline</span>
+  </div>
+</div>
+
+<button class="connect-btn" id="connectBtn" onclick="toggleConnection()">connect</button>
+
+<div class="section">
+  <div class="section-header">manual dispense</div>
+  <div class="row">
+    <div class="field">
+      <label>amount (ml)</label>
+      <input type="number" id="manualAmount" placeholder="200" min="1" max="9999">
+    </div>
+    <button class="action-btn" id="dispenseBtn" onclick="manualDispense()" disabled>dispense</button>
+  </div>
+  <div class="progress-area" id="progressArea">
+    <div class="progress-bar-bg">
+      <div class="progress-bar-fill" id="progressFill"></div>
+    </div>
+    <div class="progress-text" id="progressText">0 / 200 ml</div>
+  </div>
+</div>
+
+<div class="section">
+  <div class="section-header">schedule</div>
+  <div class="row">
+    <div class="field">
+      <label>amount (ml)</label>
+      <input type="number" id="schedAmount" placeholder="150" min="1" max="9999">
+    </div>
+    <div class="field">
+      <label>frequency</label>
+      <input type="number" id="schedFreq" placeholder="6" min="1" max="9999">
+    </div>
+    <div class="field">
+      <label>unit</label>
+      <select id="schedUnit">
+        <option value="second">second</option>
+        <option value="minute">minute</option>
+        <option value="hour" selected>hour</option>
+        <option value="day">day</option>
+        <option value="week">week</option>
+      </select>
+    </div>
+    <button class="action-btn" onclick="addSchedule()">+ add</button>
+  </div>
+  <div id="scheduleList"></div>
+  <div class="sync-row">
+    <button class="sync-btn" id="syncBtn" onclick="syncSchedule()" disabled>sync</button>
+  </div>
+</div>
+
+<div class="log-area" id="logArea"></div>
+
+<div class="footer">
+  best viewed in bluefy 800x600<br>
+  <div class="counter">visitors: 000001</div>
+</div>
+
+</div>
+
+<script>
+  let device=null,server=null,txChar=null,connected=false;
+  const SERVICE_UUID=0xFFE0,CHAR_UUID=0xFFE1;
+  let schedules=[],nextId=0;
+
+  function log(msg,c){
+    const el=document.getElementById('logArea');
+    const d=document.createElement('div');
+    const t=new Date().toLocaleTimeString('en-US',{hour12:false,hour:'2-digit',minute:'2-digit',second:'2-digit'});
+    d.innerHTML='<span style="opacity:0.5">'+t+'</span> <span class="'+(c?'log-'+c:'')+'">'+msg+'</span>';
+    el.prepend(d);
+    while(el.children.length>50)el.removeChild(el.lastChild);
+  }
+
+  function setStatus(state){
+    const dot=document.getElementById('statusDot');
+    const txt=document.getElementById('statusText');
+    const btn=document.getElementById('connectBtn');
+    connected=state==='connected';
+    dot.className='status-dot'+(connected?' on':'');
+    txt.className='status-text'+(connected?' on':'');
+    txt.textContent=connected?'online':'offline';
+    btn.textContent=connected?'disconnect':state==='connecting'?'connecting...':'connect';
+    document.getElementById('dispenseBtn').disabled=!connected;
+    document.getElementById('syncBtn').disabled=!connected;
+  }
+
+  async function toggleConnection(){
+    if(connected){
+      if(device&&device.gatt.connected)device.gatt.disconnect();
+      setStatus('disconnected');
+      log('disconnected','y');
+      return;
+    }
+    try{
+      setStatus('connecting');
+      log('scanning...','y');
+      device=await navigator.bluetooth.requestDevice({filters:[{services:[SERVICE_UUID]}],optionalServices:[SERVICE_UUID]});
+      device.addEventListener('gattserverdisconnected',()=>{setStatus('disconnected');log('connection lost','r');});
+      server=await device.gatt.connect();
+      const svc=await server.getPrimaryService(SERVICE_UUID);
+      txChar=await svc.getCharacteristic(CHAR_UUID);
+      await txChar.startNotifications();
+      txChar.addEventListener('characteristicvaluechanged',onReceive);
+      setStatus('connected');
+      log('connected to '+(device.name||'device'),'g');
+      syncClock();
+    }catch(err){
+      setStatus('disconnected');
+      if(err.name!=='NotFoundError')log('error: '+err.message,'r');
+      else log('cancelled','y');
+    }
+  }
+
+  function onReceive(e){
+    const msg=new TextDecoder().decode(e.target.value).trim();
+    if(!msg)return;
+    log('< '+msg);
+    const m=msg.match(/^P:(\d+)\/(\d+)$/);
+    if(m)updateProgress(parseInt(m[1]),parseInt(m[2]));
+    if(msg.startsWith('DONE')){
+      updateProgress(100,100);
+      setTimeout(()=>{document.getElementById('progressArea').classList.remove('active');},1500);
+      log('done','g');
+    }
+  }
+
+  async function sendCommand(cmd){
+    if(!txChar)return;
+    await txChar.writeValue(new TextEncoder().encode(cmd+'\n'));
+    log('> '+cmd);
+  }
+
+  function syncClock(){
+    const n=new Date();
+    sendCommand('T'+[n.getHours(),n.getMinutes(),n.getSeconds()].map(v=>String(v).padStart(2,'0')).join(':'));
+  }
+
+  function manualDispense(){
+    const a=parseInt(document.getElementById('manualAmount').value);
+    if(!a||a<1)return;
+    sendCommand('D'+a);
+    updateProgress(0,a);
+    document.getElementById('progressArea').classList.add('active');
+  }
+
+  function updateProgress(c,t){
+    const p=Math.min(100,(c/t)*100);
+    document.getElementById('progressFill').style.width=p+'%';
+    document.getElementById('progressText').textContent=c+' / '+t+' ml';
+  }
+
+  function unitToSec(v,u){return v*({second:1,minute:60,hour:3600,day:86400,week:604800}[u]||1);}
+
+  function addSchedule(){
+    const a=parseInt(document.getElementById('schedAmount').value);
+    const f=parseInt(document.getElementById('schedFreq').value);
+    const u=document.getElementById('schedUnit').value;
+    if(!a||a<1||!f||f<1)return;
+    schedules.push({id:nextId++,amount:a,freq:f,unit:u,intervalSec:unitToSec(f,u),enabled:true});
+    document.getElementById('schedAmount').value='';
+    document.getElementById('schedFreq').value='';
+    renderSchedules();
+  }
+
+  function removeSchedule(id){schedules=schedules.filter(s=>s.id!==id);renderSchedules();}
+  function toggleSchedule(id){const e=schedules.find(s=>s.id===id);if(e)e.enabled=!e.enabled;renderSchedules();}
+
+  function renderSchedules(){
+    const c=document.getElementById('scheduleList');
+    if(!schedules.length){c.innerHTML='';return;}
+    c.innerHTML='<div class="schedule-list">'+schedules.map(s=>
+      '<div class="schedule-entry'+(s.enabled?'':' entry-disabled')+'">'+
+        '<div class="entry-info">'+
+          '<div class="entry-main">'+s.amount+' ml</div>'+
+          '<div class="entry-sub">every '+s.freq+' '+s.unit+(s.freq!=1?'s':'')+'</div>'+
+        '</div>'+
+        '<div class="entry-actions">'+
+          '<button class="toggle-btn'+(s.enabled?'':' off')+'" onclick="toggleSchedule('+s.id+')">'+(s.enabled?'on':'off')+'</button>'+
+          '<button class="del-btn" onclick="removeSchedule('+s.id+')">x</button>'+
+        '</div>'+
+      '</div>'
+    ).join('')+'</div>';
+  }
+
+  async function syncSchedule(){
+    if(!connected)return;
+    await sendCommand('SC');
+    for(let i=0;i<schedules.length;i++){
+      const s=schedules[i];
+      await sendCommand('S'+i+','+s.amount+','+s.intervalSec+','+(s.enabled?1:0));
+    }
+    syncClock();
+    log('synced '+schedules.length+' schedule(s)','g');
+  }
+
+  renderSchedules();
+</script>
+</body>
+</html>
