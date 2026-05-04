@@ -5,18 +5,18 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
 <title>thirst plant</title>
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=VT323&family=Press+Start+2P&display=swap');
+  @import url('https://fonts.googleapis.com/css2?family=VT323&display=swap');
 
   * { margin: 0; padding: 0; box-sizing: border-box; }
 
   body {
     font-family: 'VT323', monospace;
-    background: #1a0a2e;
+    background: #0a0f0a;
     color: #33ff33;
     min-height: 100dvh;
     padding: 0;
     background-image:
-      repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,255,0,0.015) 2px, rgba(0,255,0,0.015) 4px);
+      repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,255,0,0.012) 2px, rgba(0,255,0,0.012) 4px);
   }
 
   body::before {
@@ -24,16 +24,16 @@
     position: fixed;
     inset: 0;
     background:
-      radial-gradient(1px 1px at 10% 20%, #ffffff44, transparent),
-      radial-gradient(1px 1px at 30% 70%, #ffffff33, transparent),
-      radial-gradient(1px 1px at 50% 10%, #ffffff22, transparent),
-      radial-gradient(1px 1px at 70% 80%, #ffffff44, transparent),
-      radial-gradient(1px 1px at 90% 40%, #ffffff33, transparent),
-      radial-gradient(1px 1px at 15% 90%, #ffffff22, transparent),
-      radial-gradient(1px 1px at 85% 15%, #ffffff44, transparent),
-      radial-gradient(1px 1px at 45% 55%, #ffffff22, transparent),
-      radial-gradient(1px 1px at 65% 35%, #ffffff33, transparent),
-      radial-gradient(1px 1px at 25% 45%, #ffffff22, transparent);
+      radial-gradient(1px 1px at 10% 20%, #ffffff33, transparent),
+      radial-gradient(1px 1px at 30% 70%, #ffffff22, transparent),
+      radial-gradient(1px 1px at 50% 10%, #ffffff18, transparent),
+      radial-gradient(1px 1px at 70% 80%, #ffffff33, transparent),
+      radial-gradient(1px 1px at 90% 40%, #ffffff22, transparent),
+      radial-gradient(1px 1px at 15% 90%, #ffffff18, transparent),
+      radial-gradient(1px 1px at 85% 15%, #ffffff33, transparent),
+      radial-gradient(1px 1px at 45% 55%, #ffffff18, transparent),
+      radial-gradient(1px 1px at 65% 35%, #ffffff22, transparent),
+      radial-gradient(1px 1px at 25% 45%, #ffffff18, transparent);
     pointer-events: none;
     z-index: 0;
   }
@@ -47,12 +47,12 @@
     margin: 0 12px;
   }
   .header h1 {
-    font-family: 'Press Start 2P', monospace;
-    font-size: 20px;
-    color: #00ffff;
-    text-shadow: 2px 2px 0 #000, 0 0 10px rgba(0,255,255,0.4);
-    letter-spacing: 0.05em;
-    margin-bottom: 4px;
+    font-family: 'VT323', monospace;
+    font-size: 52px;
+    color: #33ff33;
+    text-shadow: 0 0 12px rgba(51,255,51,0.4), 0 0 2px rgba(51,255,51,0.8);
+    letter-spacing: 0.12em;
+    margin-bottom: 2px;
   }
   .header .tagline {
     font-size: 16px;
@@ -82,14 +82,14 @@
     margin: 14px 12px;
     padding: 10px;
     background: #000;
-    border: 2px solid #ff00ff;
-    color: #ff00ff;
+    border: 2px solid #00ffff;
+    color: #00ffff;
     font-family: 'VT323', monospace;
     font-size: 22px;
     cursor: pointer;
-    text-shadow: 0 0 8px rgba(255,0,255,0.5);
+    text-shadow: 0 0 8px rgba(0,255,255,0.4);
   }
-  .connect-btn:active { background: #ff00ff; color: #000; }
+  .connect-btn:active { background: #00ffff; color: #000; }
 
   .section {
     margin: 12px;
@@ -103,8 +103,27 @@
     font-size: 20px;
     font-weight: bold;
     letter-spacing: 0.05em;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    -webkit-user-select: none;
+    user-select: none;
   }
-  .section-header::before { content: '> '; }
+  .section-header .caret {
+    transition: transform 0.15s;
+    font-size: 16px;
+  }
+  .section-header.collapsed .caret {
+    transform: rotate(-90deg);
+  }
+  .section-body {
+    overflow: hidden;
+    transition: max-height 0.25s ease;
+  }
+  .section-body.collapsed {
+    max-height: 0 !important;
+  }
 
   .row {
     padding: 10px;
@@ -250,23 +269,6 @@
   .log-g { color: #33ff33; }
   .log-y { color: #ffff00; }
   .log-r { color: #ff3333; }
-
-  .footer {
-    text-align: center;
-    padding: 20px 12px 30px;
-    font-size: 15px;
-    color: #1a8a1a;
-  }
-  .counter {
-    display: inline-block;
-    background: #000;
-    border: 1px solid #1a8a1a;
-    padding: 2px 10px;
-    font-size: 18px;
-    color: #ffff00;
-    letter-spacing: 0.1em;
-    margin-top: 4px;
-  }
 </style>
 </head>
 <body>
@@ -284,57 +286,62 @@
 <button class="connect-btn" id="connectBtn" onclick="toggleConnection()">connect</button>
 
 <div class="section">
-  <div class="section-header">manual dispense</div>
-  <div class="row">
-    <div class="field">
-      <label>amount (ml)</label>
-      <input type="number" id="manualAmount" placeholder="200" min="1" max="9999">
-    </div>
-    <button class="action-btn" id="dispenseBtn" onclick="manualDispense()" disabled>dispense</button>
+  <div class="section-header" onclick="toggleSection('dispense')">
+    <span>> manual dispense</span>
+    <span class="caret" id="caretDispense">▼</span>
   </div>
-  <div class="progress-area" id="progressArea">
-    <div class="progress-bar-bg">
-      <div class="progress-bar-fill" id="progressFill"></div>
+  <div class="section-body" id="bodyDispense">
+    <div class="row">
+      <div class="field">
+        <label>amount (ml)</label>
+        <input type="number" id="manualAmount" placeholder="200" min="1" max="9999">
+      </div>
+      <button class="action-btn" id="dispenseBtn" onclick="manualDispense()" disabled>dispense</button>
     </div>
-    <div class="progress-text" id="progressText">0 / 200 ml</div>
+    <div class="progress-area" id="progressArea">
+      <div class="progress-bar-bg">
+        <div class="progress-bar-fill" id="progressFill"></div>
+      </div>
+      <div class="progress-text" id="progressText">0 / 200 ml</div>
+    </div>
   </div>
 </div>
 
 <div class="section">
-  <div class="section-header">schedule</div>
-  <div class="row">
-    <div class="field">
-      <label>amount (ml)</label>
-      <input type="number" id="schedAmount" placeholder="150" min="1" max="9999">
-    </div>
-    <div class="field">
-      <label>frequency</label>
-      <input type="number" id="schedFreq" placeholder="6" min="1" max="9999">
-    </div>
-    <div class="field">
-      <label>unit</label>
-      <select id="schedUnit">
-        <option value="second">second</option>
-        <option value="minute">minute</option>
-        <option value="hour" selected>hour</option>
-        <option value="day">day</option>
-        <option value="week">week</option>
-      </select>
-    </div>
-    <button class="action-btn" onclick="addSchedule()">+ add</button>
+  <div class="section-header" onclick="toggleSection('schedule')">
+    <span>> schedule</span>
+    <span class="caret" id="caretSchedule">▼</span>
   </div>
-  <div id="scheduleList"></div>
-  <div class="sync-row">
-    <button class="sync-btn" id="syncBtn" onclick="syncSchedule()" disabled>sync</button>
+  <div class="section-body" id="bodySchedule">
+    <div class="row">
+      <div class="field">
+        <label>amount (ml)</label>
+        <input type="number" id="schedAmount" placeholder="150" min="1" max="9999">
+      </div>
+      <div class="field">
+        <label>frequency</label>
+        <input type="number" id="schedFreq" placeholder="6" min="1" max="9999">
+      </div>
+      <div class="field">
+        <label>unit</label>
+        <select id="schedUnit">
+          <option value="second">second</option>
+          <option value="minute">minute</option>
+          <option value="hour" selected>hour</option>
+          <option value="day">day</option>
+          <option value="week">week</option>
+        </select>
+      </div>
+      <button class="action-btn" onclick="addSchedule()">+ add</button>
+    </div>
+    <div id="scheduleList"></div>
+    <div class="sync-row">
+      <button class="sync-btn" id="syncBtn" onclick="syncSchedule()" disabled>sync</button>
+    </div>
   </div>
 </div>
 
 <div class="log-area" id="logArea"></div>
-
-<div class="footer">
-  best viewed in bluefy 800x600<br>
-  <div class="counter">visitors: 000001</div>
-</div>
 
 </div>
 
@@ -342,6 +349,32 @@
   let device=null,server=null,txChar=null,connected=false;
   const SERVICE_UUID=0xFFE0,CHAR_UUID=0xFFE1;
   let schedules=[],nextId=0;
+
+  function toggleSection(name){
+    const id=name.charAt(0).toUpperCase()+name.slice(1);
+    const body=document.getElementById('body'+id);
+    const caret=document.getElementById('caret'+id);
+    const header=caret.closest('.section-header');
+    const isCollapsed=body.classList.contains('collapsed');
+    if(isCollapsed){
+      body.style.maxHeight=body.scrollHeight+'px';
+      body.classList.remove('collapsed');
+      header.classList.remove('collapsed');
+    }else{
+      body.style.maxHeight=body.scrollHeight+'px';
+      requestAnimationFrame(()=>{
+        body.style.maxHeight='0';
+        body.classList.add('collapsed');
+        header.classList.add('collapsed');
+      });
+    }
+  }
+
+  function initSections(){
+    document.querySelectorAll('.section-body').forEach(b=>{
+      b.style.maxHeight=b.scrollHeight+'px';
+    });
+  }
 
   function log(msg,c){
     const el=document.getElementById('logArea');
@@ -441,10 +474,22 @@
     document.getElementById('schedAmount').value='';
     document.getElementById('schedFreq').value='';
     renderSchedules();
+    // update max-height since content changed
+    const body=document.getElementById('bodySchedule');
+    if(!body.classList.contains('collapsed'))body.style.maxHeight=body.scrollHeight+'px';
   }
 
-  function removeSchedule(id){schedules=schedules.filter(s=>s.id!==id);renderSchedules();}
-  function toggleSchedule(id){const e=schedules.find(s=>s.id===id);if(e)e.enabled=!e.enabled;renderSchedules();}
+  function removeSchedule(id){
+    schedules=schedules.filter(s=>s.id!==id);
+    renderSchedules();
+    const body=document.getElementById('bodySchedule');
+    if(!body.classList.contains('collapsed'))body.style.maxHeight=body.scrollHeight+'px';
+  }
+  function toggleSchedule(id){
+    const e=schedules.find(s=>s.id===id);
+    if(e)e.enabled=!e.enabled;
+    renderSchedules();
+  }
 
   function renderSchedules(){
     const c=document.getElementById('scheduleList');
@@ -475,6 +520,7 @@
   }
 
   renderSchedules();
+  window.addEventListener('load',initSections);
 </script>
 </body>
 </html>
