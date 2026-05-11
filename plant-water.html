@@ -407,9 +407,9 @@
     try{
       setStatus('connecting');
       log('scanning...','y');
-   device=await navigator.bluetooth.requestDevice({
-    filters: [{name: 'DSD TECH'}],
-    optionalServices: [0xFFE0]
+      device=await navigator.bluetooth.requestDevice({
+      filters: [{services: [0xFFE0]}]
+    });
       });
       device.addEventListener('gattserverdisconnected',()=>{setStatus('disconnected');log('connection lost','r');});
       server=await device.gatt.connect();
