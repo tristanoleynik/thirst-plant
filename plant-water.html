@@ -288,7 +288,7 @@
 <div class="section">
   <div class="section-header" onclick="toggleSection('dispense')">
     <span>> manual dispense</span>
-    <span class="caret" id="caretDispense">▼</span>
+    <span class="caret" id="caretDispense">&#9660;</span>
   </div>
   <div class="section-body" id="bodyDispense">
     <div class="row">
@@ -310,7 +310,7 @@
 <div class="section">
   <div class="section-header" onclick="toggleSection('schedule')">
     <span>> schedule</span>
-    <span class="caret" id="caretSchedule">▼</span>
+    <span class="caret" id="caretSchedule">&#9660;</span>
   </div>
   <div class="section-body" id="bodySchedule">
     <div class="row">
@@ -347,7 +347,6 @@
 
 <script>
   let device=null,server=null,txChar=null,connected=false;
-  const SERVICE_UUID=0xFFE0,CHAR_UUID=0xFFE1;
   let schedules=[],nextId=0;
 
   function toggleSection(name){
@@ -408,11 +407,37 @@
     try{
       setStatus('connecting');
       log('scanning...','y');
-      device=await navigator.bluetooth.requestDevice({filters:[{services:[SERVICE_UUID]}],optionalServices:[SERVICE_UUID]});
+      device=await navigator.bluetooth.requestDevice({
+        acceptAllDevices: true,
+        optionalServices: [0xFFE0, 0xFFE1]
+      });
       device.addEventListener('gattserverdisconnected',()=>{setStatus('disconnected');log('connection lost','r');});
       server=await device.gatt.connect();
-      const svc=await server.getPrimaryService(SERVICE_UUID);
-      txChar=await svc.getCharacteristic(CHAR_UUID);
+
+      // Try to find the UART service - check common UUIDs
+      let service;
+      let characteristic;
+      const serviceUUIDs = [0xFFE0, 0xFFF0];
+      const charUUIDs = [0xFFE1, 0xFFF1];
+
+      for(let i=0; i<serviceUUIDs.length; i++){
+        try{
+          service=await server.getPrimaryService(serviceUUIDs[i]);
+          characteristic=await service.getCharacteristic(charUUIDs[i]);
+          log('found service: 0x'+serviceUUIDs[i].toString(16).toUpperCase(),'g');
+          break;
+        }catch(e){
+          continue;
+        }
+      }
+
+      if(!characteristic){
+        // If common UUIDs fail, try to discover services
+        log('standard UUIDs not found, discovering...','y');
+        throw new Error('no compatible service found — check LightBlue for the correct UUID');
+      }
+
+      txChar=characteristic;
       await txChar.startNotifications();
       txChar.addEventListener('characteristicvaluechanged',onReceive);
       setStatus('connected');
@@ -474,7 +499,6 @@
     document.getElementById('schedAmount').value='';
     document.getElementById('schedFreq').value='';
     renderSchedules();
-    // update max-height since content changed
     const body=document.getElementById('bodySchedule');
     if(!body.classList.contains('collapsed'))body.style.maxHeight=body.scrollHeight+'px';
   }
