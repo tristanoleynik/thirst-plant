@@ -182,6 +182,11 @@
   .action-btn:active { background: #33ff33; color: #000; }
   .action-btn:disabled { border-color: #1a8a1a; color: #1a8a1a; cursor: not-allowed; }
 
+  .action-btn.prime { border-color: #ffff00; color: #ffff00; }
+  .action-btn.prime:active { background: #ffff00; color: #000; }
+  .action-btn.stop { border-color: #ff3333; color: #ff3333; }
+  .action-btn.stop:active { background: #ff3333; color: #000; }
+
   .progress-area { padding: 0 10px 10px; display: none; }
   .progress-area.active { display: block; }
   .progress-bar-bg {
@@ -269,6 +274,13 @@
   .log-g { color: #33ff33; }
   .log-y { color: #ffff00; }
   .log-r { color: #ff3333; }
+
+  .btn-row {
+    padding: 0 10px 10px;
+    display: flex;
+    gap: 8px;
+  }
+  .btn-row .action-btn { flex: 1; text-align: center; }
 </style>
 </head>
 <body>
@@ -293,10 +305,14 @@
   <div class="section-body" id="bodyDispense">
     <div class="row">
       <div class="field">
-        <label>amount (ml)</label>
-        <input type="number" id="manualAmount" placeholder="200" min="1" max="9999">
+        <label>amount (ml) &middot; min 3</label>
+        <input type="number" id="manualAmount" placeholder="200" min="3" max="9999">
       </div>
       <button class="action-btn" id="dispenseBtn" onclick="manualDispense()" disabled>dispense</button>
+    </div>
+    <div class="btn-row">
+      <button class="action-btn prime" id="primeBtn" onclick="primeSystem()" disabled>prime</button>
+      <button class="action-btn stop" id="stopBtn" onclick="emergencyStop()" disabled>stop</button>
     </div>
     <div class="progress-area" id="progressArea">
       <div class="progress-bar-bg">
@@ -316,7 +332,7 @@
     <div class="row">
       <div class="field">
         <label>amount (ml)</label>
-        <input type="number" id="schedAmount" placeholder="150" min="1" max="9999">
+        <input type="number" id="schedAmount" placeholder="150" min="3" max="9999">
       </div>
       <div class="field">
         <label>frequency</label>
@@ -346,6 +362,10 @@
 </div>
 
 <script>
+  const SERVICE_UUID = '0000ffe0-0000-1000-8000-00805f9b34fb';
+  const CHAR_UUID = '0000ffe1-0000-1000-8000-00805f9b34fb';
+  const MIN_ML = 3;
+
   let device=null,server=null,txChar=null,connected=false;
   let schedules=[],nextId=0;
 
@@ -394,6 +414,8 @@
     txt.textContent=connected?'online':'offline';
     btn.textContent=connected?'disconnect':state==='connecting'?'connecting...':'connect';
     document.getElementById('dispenseBtn').disabled=!connected;
+    document.getElementById('primeBtn').disabled=!connected;
+    document.getElementById('stopBtn').disabled=!connected;
     document.getElementById('syncBtn').disabled=!connected;
   }
 
@@ -408,36 +430,12 @@
       setStatus('connecting');
       log('scanning...','y');
       device=await navigator.bluetooth.requestDevice({
-      filters: [{services: [0xFFE0]}]
-    });
+        filters: [{services: [SERVICE_UUID]}]
       });
       device.addEventListener('gattserverdisconnected',()=>{setStatus('disconnected');log('connection lost','r');});
       server=await device.gatt.connect();
-
-      // Try to find the UART service - check common UUIDs
-      let service;
-      let characteristic;
-      const serviceUUIDs = [0xFFE0, 0xFFF0];
-      const charUUIDs = [0xFFE1, 0xFFF1];
-
-      for(let i=0; i<serviceUUIDs.length; i++){
-        try{
-          service=await server.getPrimaryService(serviceUUIDs[i]);
-          characteristic=await service.getCharacteristic(charUUIDs[i]);
-          log('found service: 0x'+serviceUUIDs[i].toString(16).toUpperCase(),'g');
-          break;
-        }catch(e){
-          continue;
-        }
-      }
-
-      if(!characteristic){
-        // If common UUIDs fail, try to discover services
-        log('standard UUIDs not found, discovering...','y');
-        throw new Error('no compatible service found — check LightBlue for the correct UUID');
-      }
-
-      txChar=characteristic;
+      var service=await server.getPrimaryService(SERVICE_UUID);
+      txChar=await service.getCharacteristic(CHAR_UUID);
       await txChar.startNotifications();
       txChar.addEventListener('characteristicvaluechanged',onReceive);
       setStatus('connected');
@@ -476,10 +474,21 @@
 
   function manualDispense(){
     const a=parseInt(document.getElementById('manualAmount').value);
-    if(!a||a<1)return;
+    if(!a||a<MIN_ML){log('minimum '+MIN_ML+' ml','r');return;}
     sendCommand('D'+a);
     updateProgress(0,a);
     document.getElementById('progressArea').classList.add('active');
+  }
+
+  function primeSystem(){
+    sendCommand('R');
+    log('priming...','y');
+  }
+
+  function emergencyStop(){
+    sendCommand('X');
+    document.getElementById('progressArea').classList.remove('active');
+    log('stop sent','r');
   }
 
   function updateProgress(c,t){
@@ -494,7 +503,7 @@
     const a=parseInt(document.getElementById('schedAmount').value);
     const f=parseInt(document.getElementById('schedFreq').value);
     const u=document.getElementById('schedUnit').value;
-    if(!a||a<1||!f||f<1)return;
+    if(!a||a<MIN_ML||!f||f<1)return;
     schedules.push({id:nextId++,amount:a,freq:f,unit:u,intervalSec:unitToSec(f,u),enabled:true});
     document.getElementById('schedAmount').value='';
     document.getElementById('schedFreq').value='';
