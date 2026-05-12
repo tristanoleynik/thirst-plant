@@ -205,6 +205,42 @@
   }
   .progress-text { font-size: 16px; color: #1a8a1a; text-align: center; }
 
+  .slider-row {
+    padding: 6px 10px 10px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .slider-row label {
+    font-size: 16px;
+    color: #ffff00;
+    white-space: nowrap;
+  }
+  .slider-row input[type=range] {
+    flex: 1;
+    -webkit-appearance: none;
+    appearance: none;
+    height: 6px;
+    background: #1a8a1a;
+    outline: none;
+    border-radius: 0;
+  }
+  .slider-row input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 18px;
+    height: 18px;
+    background: #33ff33;
+    cursor: pointer;
+    border: 2px solid #000;
+  }
+  .slider-row .speed-val {
+    font-size: 20px;
+    color: #33ff33;
+    min-width: 42px;
+    text-align: right;
+  }
+
   .schedule-list { border-top: 1px dashed #1a8a1a; }
   .schedule-entry {
     display: flex;
@@ -310,6 +346,11 @@
       </div>
       <button class="action-btn" id="dispenseBtn" onclick="manualDispense()" disabled>dispense</button>
     </div>
+    <div class="slider-row">
+      <label>speed</label>
+      <input type="range" id="speedSlider" min="20" max="100" value="100" oninput="onSpeedChange(this.value)">
+      <span class="speed-val" id="speedVal">100%</span>
+    </div>
     <div class="btn-row">
       <button class="action-btn prime" id="primeBtn" onclick="primeSystem()" disabled>prime</button>
       <button class="action-btn stop" id="stopBtn" onclick="emergencyStop()" disabled>stop</button>
@@ -368,6 +409,50 @@
 
   let device=null,server=null,txChar=null,connected=false;
   let schedules=[],nextId=0;
+  let currentSpeed=100;
+
+  // Translate outgoing commands to plain english
+  function translateSent(cmd){
+    if(cmd.match(/^D\d+$/)) return 'requesting '+cmd.slice(1)+' ml dispense';
+    if(cmd==='X') return 'sending emergency stop';
+    if(cmd==='R') return 'starting prime sequence';
+    if(cmd.match(/^V\d+$/)) return 'setting pump speed to '+cmd.slice(1)+'%';
+    if(cmd.match(/^T\d/)) return 'syncing clock to '+cmd.slice(1);
+    if(cmd==='SC') return 'clearing schedules on device';
+    if(cmd.match(/^S\d+,/)){
+      var p=cmd.slice(1).split(',');
+      var secs=parseInt(p[2]);
+      var label=secs>=604800?(secs/604800)+' week':secs>=86400?(secs/86400)+' day':secs>=3600?(secs/3600)+' hour':secs>=60?(secs/60)+' minute':secs+' second';
+      return 'saving schedule slot '+p[0]+': '+p[1]+' ml every '+label+(parseFloat(label)!==1?'s':'')+' ['+(p[3]==='1'?'enabled':'disabled')+']';
+    }
+    if(cmd==='S?') return 'querying schedules from device';
+    return 'sent: '+cmd;
+  }
+
+  // Translate incoming responses to plain english
+  function translateReceived(msg){
+    if(msg==='OK') return 'pump started';
+    if(msg.match(/^P:\d+\/\d+$/)){
+      var parts=msg.slice(2).split('/');
+      return 'dispensing: '+parts[0]+' of '+parts[1]+' ml';
+    }
+    if(msg.match(/^DONE:/)) return 'dispense complete: '+msg.slice(5)+' ml delivered';
+    if(msg==='STOPPED') return 'pump stopped, all schedules disabled';
+    if(msg==='PRIMING') return 'prime started, waiting for flow';
+    if(msg==='RDONE') return 'prime complete, line is filled';
+    if(msg==='RTIMEOUT') return 'prime timed out, no flow detected in 30 seconds';
+    if(msg==='TOK') return 'clock synced successfully';
+    if(msg==='SCOK') return 'all schedules cleared on device';
+    if(msg==='SOK') return 'schedule saved to device';
+    if(msg.match(/^V:/)) return 'pump speed set to '+msg.slice(2)+'%';
+    if(msg==='ERR') return 'device received unknown command';
+    if(msg==='SEMPTY') return 'no schedules on device';
+    if(msg.match(/^S\d+,/)){
+      var p=msg.slice(1).split(',');
+      return 'device schedule slot '+p[0]+': '+p[1]+' ml, interval '+p[2]+'s, '+(p[3]==='1'?'enabled':'disabled');
+    }
+    return 'device: '+msg;
+  }
 
   function toggleSection(name){
     const id=name.charAt(0).toUpperCase()+name.slice(1);
@@ -428,7 +513,7 @@
     }
     try{
       setStatus('connecting');
-      log('scanning...','y');
+      log('scanning for device...','y');
       device=await navigator.bluetooth.requestDevice({
         filters: [{services: [SERVICE_UUID]}]
       });
@@ -443,28 +528,30 @@
       syncClock();
     }catch(err){
       setStatus('disconnected');
-      if(err.name!=='NotFoundError')log('error: '+err.message,'r');
-      else log('cancelled','y');
+      if(err.name!=='NotFoundError')log('connection error: '+err.message,'r');
+      else log('scan cancelled','y');
     }
   }
 
   function onReceive(e){
     const msg=new TextDecoder().decode(e.target.value).trim();
     if(!msg)return;
-    log('< '+msg);
+    log(translateReceived(msg), msg==='ERR'||msg==='RTIMEOUT'?'r':msg==='STOPPED'?'r':msg.startsWith('DONE')||msg==='RDONE'||msg==='TOK'||msg==='SCOK'||msg==='SOK'?'g':'');
     const m=msg.match(/^P:(\d+)\/(\d+)$/);
     if(m)updateProgress(parseInt(m[1]),parseInt(m[2]));
     if(msg.startsWith('DONE')){
       updateProgress(100,100);
       setTimeout(()=>{document.getElementById('progressArea').classList.remove('active');},1500);
-      log('done','g');
+    }
+    if(msg==='STOPPED'){
+      document.getElementById('progressArea').classList.remove('active');
     }
   }
 
   async function sendCommand(cmd){
     if(!txChar)return;
     await txChar.writeValue(new TextEncoder().encode(cmd+'\n'));
-    log('> '+cmd);
+    log(translateSent(cmd), cmd==='X'?'r':cmd==='R'?'y':'');
   }
 
   function syncClock(){
@@ -472,9 +559,15 @@
     sendCommand('T'+[n.getHours(),n.getMinutes(),n.getSeconds()].map(v=>String(v).padStart(2,'0')).join(':'));
   }
 
+  function onSpeedChange(val){
+    currentSpeed=parseInt(val);
+    document.getElementById('speedVal').textContent=currentSpeed+'%';
+    if(connected) sendCommand('V'+currentSpeed);
+  }
+
   function manualDispense(){
     const a=parseInt(document.getElementById('manualAmount').value);
-    if(!a||a<MIN_ML){log('minimum '+MIN_ML+' ml','r');return;}
+    if(!a||a<MIN_ML){log('minimum dispense is '+MIN_ML+' ml','r');return;}
     sendCommand('D'+a);
     updateProgress(0,a);
     document.getElementById('progressArea').classList.add('active');
@@ -482,13 +575,11 @@
 
   function primeSystem(){
     sendCommand('R');
-    log('priming...','y');
   }
 
   function emergencyStop(){
     sendCommand('X');
     document.getElementById('progressArea').classList.remove('active');
-    log('stop sent','r');
   }
 
   function updateProgress(c,t){
@@ -508,6 +599,7 @@
     document.getElementById('schedAmount').value='';
     document.getElementById('schedFreq').value='';
     renderSchedules();
+    if(connected) pushSchedulesToDevice();
     const body=document.getElementById('bodySchedule');
     if(!body.classList.contains('collapsed'))body.style.maxHeight=body.scrollHeight+'px';
   }
@@ -515,13 +607,16 @@
   function removeSchedule(id){
     schedules=schedules.filter(s=>s.id!==id);
     renderSchedules();
+    if(connected) pushSchedulesToDevice();
     const body=document.getElementById('bodySchedule');
     if(!body.classList.contains('collapsed'))body.style.maxHeight=body.scrollHeight+'px';
   }
-  function toggleSchedule(id){
+
+  function toggleScheduleEntry(id){
     const e=schedules.find(s=>s.id===id);
     if(e)e.enabled=!e.enabled;
     renderSchedules();
+    if(connected) pushSchedulesToDevice();
   }
 
   function renderSchedules(){
@@ -534,22 +629,25 @@
           '<div class="entry-sub">every '+s.freq+' '+s.unit+(s.freq!=1?'s':'')+'</div>'+
         '</div>'+
         '<div class="entry-actions">'+
-          '<button class="toggle-btn'+(s.enabled?'':' off')+'" onclick="toggleSchedule('+s.id+')">'+(s.enabled?'on':'off')+'</button>'+
+          '<button class="toggle-btn'+(s.enabled?'':' off')+'" onclick="toggleScheduleEntry('+s.id+')">'+(s.enabled?'on':'off')+'</button>'+
           '<button class="del-btn" onclick="removeSchedule('+s.id+')">x</button>'+
         '</div>'+
       '</div>'
     ).join('')+'</div>';
   }
 
-  async function syncSchedule(){
-    if(!connected)return;
+  async function pushSchedulesToDevice(){
     await sendCommand('SC');
     for(let i=0;i<schedules.length;i++){
       const s=schedules[i];
       await sendCommand('S'+i+','+s.amount+','+s.intervalSec+','+(s.enabled?1:0));
     }
     syncClock();
-    log('synced '+schedules.length+' schedule(s)','g');
+  }
+
+  async function syncSchedule(){
+    if(!connected)return;
+    await pushSchedulesToDevice();
   }
 
   renderSchedules();
