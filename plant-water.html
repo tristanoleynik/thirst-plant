@@ -205,41 +205,36 @@
   }
   .progress-text { font-size: 16px; color: #1a8a1a; text-align: center; }
 
-  .slider-row {
+  /* Speed buttons */
+  .speed-row {
     padding: 6px 10px 10px;
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 8px;
   }
-  .slider-row label {
+  .speed-row label {
     font-size: 16px;
     color: #ffff00;
     white-space: nowrap;
   }
-  .slider-row input[type=range] {
+  .speed-btn {
     flex: 1;
-    -webkit-appearance: none;
-    appearance: none;
-    height: 6px;
-    background: #1a8a1a;
-    outline: none;
-    border-radius: 0;
-  }
-  .slider-row input[type=range]::-webkit-slider-thumb {
-    -webkit-appearance: none;
-    appearance: none;
-    width: 18px;
-    height: 18px;
-    background: #33ff33;
+    padding: 6px 0;
+    background: #000;
+    border: 2px solid #1a8a1a;
+    color: #1a8a1a;
+    font-family: 'VT323', monospace;
+    font-size: 18px;
     cursor: pointer;
-    border: 2px solid #000;
+    text-align: center;
+    transition: all 0.1s;
   }
-  .slider-row .speed-val {
-    font-size: 20px;
+  .speed-btn.active {
+    border-color: #33ff33;
     color: #33ff33;
-    min-width: 42px;
-    text-align: right;
+    box-shadow: 0 0 6px rgba(51,255,51,0.3);
   }
+  .speed-btn:active { background: #33ff33; color: #000; }
 
   .schedule-list { border-top: 1px dashed #1a8a1a; }
   .schedule-entry {
@@ -346,10 +341,11 @@
       </div>
       <button class="action-btn" id="dispenseBtn" onclick="manualDispense()" disabled>dispense</button>
     </div>
-    <div class="slider-row">
+    <div class="speed-row">
       <label>speed</label>
-      <input type="range" id="speedSlider" min="20" max="100" value="100" oninput="onSpeedChange(this.value)">
-      <span class="speed-val" id="speedVal">100%</span>
+      <button class="speed-btn" id="speedSlow" onclick="setSpeed('slow')">slow</button>
+      <button class="speed-btn" id="speedMedium" onclick="setSpeed('medium')">medium</button>
+      <button class="speed-btn active" id="speedFast" onclick="setSpeed('fast')">fast</button>
     </div>
     <div class="btn-row">
       <button class="action-btn prime" id="primeBtn" onclick="primeSystem()" disabled>prime</button>
@@ -407,11 +403,12 @@
   const CHAR_UUID = '0000ffe1-0000-1000-8000-00805f9b34fb';
   const MIN_ML = 3;
 
+  const SPEEDS = { slow: 33, medium: 66, fast: 100 };
+  let currentSpeedName = 'fast';
+
   let device=null,server=null,txChar=null,connected=false;
   let schedules=[],nextId=0;
-  let currentSpeed=100;
 
-  // Translate outgoing commands to plain english
   function translateSent(cmd){
     if(cmd.match(/^D\d+$/)) return 'requesting '+cmd.slice(1)+' ml dispense';
     if(cmd==='X') return 'sending emergency stop';
@@ -429,7 +426,6 @@
     return 'sent: '+cmd;
   }
 
-  // Translate incoming responses to plain english
   function translateReceived(msg){
     if(msg==='OK') return 'pump started';
     if(msg.match(/^P:\d+\/\d+$/)){
@@ -452,6 +448,14 @@
       return 'device schedule slot '+p[0]+': '+p[1]+' ml, interval '+p[2]+'s, '+(p[3]==='1'?'enabled':'disabled');
     }
     return 'device: '+msg;
+  }
+
+  function setSpeed(name){
+    currentSpeedName = name;
+    document.getElementById('speedSlow').className = 'speed-btn' + (name==='slow'?' active':'');
+    document.getElementById('speedMedium').className = 'speed-btn' + (name==='medium'?' active':'');
+    document.getElementById('speedFast').className = 'speed-btn' + (name==='fast'?' active':'');
+    if(connected) sendCommand('V'+SPEEDS[name]);
   }
 
   function toggleSection(name){
@@ -526,6 +530,8 @@
       setStatus('connected');
       log('connected to '+(device.name||'device'),'g');
       syncClock();
+      // Send current speed setting
+      sendCommand('V'+SPEEDS[currentSpeedName]);
     }catch(err){
       setStatus('disconnected');
       if(err.name!=='NotFoundError')log('connection error: '+err.message,'r');
@@ -557,12 +563,6 @@
   function syncClock(){
     const n=new Date();
     sendCommand('T'+[n.getHours(),n.getMinutes(),n.getSeconds()].map(v=>String(v).padStart(2,'0')).join(':'));
-  }
-
-  function onSpeedChange(val){
-    currentSpeed=parseInt(val);
-    document.getElementById('speedVal').textContent=currentSpeed+'%';
-    if(connected) sendCommand('V'+currentSpeed);
   }
 
   function manualDispense(){
