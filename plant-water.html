@@ -205,7 +205,6 @@
   }
   .progress-text { font-size: 16px; color: #1a8a1a; text-align: center; }
 
-  /* Speed buttons */
   .speed-row {
     padding: 6px 10px 10px;
     display: flex;
@@ -276,21 +275,6 @@
   }
   .del-btn:active { background: #ff3333; color: #000; }
 
-  .sync-row { padding: 10px; border-top: 1px dashed #1a8a1a; }
-  .sync-btn {
-    width: 100%;
-    padding: 8px;
-    background: #000;
-    border: 2px solid #00ffff;
-    color: #00ffff;
-    font-family: 'VT323', monospace;
-    font-size: 22px;
-    cursor: pointer;
-    text-shadow: 0 0 6px rgba(0,255,255,0.3);
-  }
-  .sync-btn:active { background: #00ffff; color: #000; }
-  .sync-btn:disabled { border-color: #0a5a5a; color: #0a5a5a; text-shadow: none; cursor: not-allowed; }
-
   .log-area {
     margin: 12px;
     border: 1px solid #1a8a1a;
@@ -355,7 +339,7 @@
       <div class="progress-bar-bg">
         <div class="progress-bar-fill" id="progressFill"></div>
       </div>
-      <div class="progress-text" id="progressText">0 / 200 ml</div>
+      <div class="progress-text" id="progressText">0 / 0 ml</div>
     </div>
   </div>
 </div>
@@ -388,9 +372,6 @@
       <button class="action-btn" onclick="addSchedule()">+ add</button>
     </div>
     <div id="scheduleList"></div>
-    <div class="sync-row">
-      <button class="sync-btn" id="syncBtn" onclick="syncSchedule()" disabled>sync</button>
-    </div>
   </div>
 </div>
 
@@ -402,75 +383,73 @@
   const SERVICE_UUID = '0000ffe0-0000-1000-8000-00805f9b34fb';
   const CHAR_UUID = '0000ffe1-0000-1000-8000-00805f9b34fb';
   const MIN_ML = 3;
-
   const SPEEDS = { slow: 33, medium: 66, fast: 100 };
   let currentSpeedName = 'fast';
-
   let device=null,server=null,txChar=null,connected=false;
   let schedules=[],nextId=0;
+  let dispenseTarget=0;
+  let suppressLog=false;
 
-  function translateSent(cmd){
-    if(cmd.match(/^D\d+$/)) return 'requesting '+cmd.slice(1)+' ml dispense';
-    if(cmd==='X') return 'sending emergency stop';
-    if(cmd==='R') return 'starting prime sequence';
-    if(cmd.match(/^V\d+$/)) return 'setting pump speed to '+cmd.slice(1)+'%';
-    if(cmd.match(/^T\d/)) return 'syncing clock to '+cmd.slice(1);
-    if(cmd==='SC') return 'clearing schedules on device';
-    if(cmd.match(/^S\d+,/)){
-      var p=cmd.slice(1).split(',');
-      var secs=parseInt(p[2]);
-      var label=secs>=604800?(secs/604800)+' week':secs>=86400?(secs/86400)+' day':secs>=3600?(secs/3600)+' hour':secs>=60?(secs/60)+' minute':secs+' second';
-      return 'saving schedule slot '+p[0]+': '+p[1]+' ml every '+label+(parseFloat(label)!==1?'s':'')+' ['+(p[3]==='1'?'enabled':'disabled')+']';
-    }
-    if(cmd==='S?') return 'querying schedules from device';
-    return 'sent: '+cmd;
+  function cleanMsg(msg){
+    // Strip any non-printable or replacement characters
+    return msg.replace(/[^\x20-\x7E]/g,'').trim();
   }
 
   function translateReceived(msg){
     if(msg==='OK') return 'pump started';
-    if(msg.match(/^P:\d+\/\d+$/)){
-      var parts=msg.slice(2).split('/');
-      return 'dispensing: '+parts[0]+' of '+parts[1]+' ml';
+    var pm=msg.match(/^P:(\d+)\/(\d+)$/);
+    if(pm) return null; // don't log every progress update, just update bar
+    if(msg.match(/^DONE/)){
+      var d=msg.match(/^DONE:?(\d*)/);
+      return 'dispense complete'+(d&&d[1]?': '+d[1]+' ml delivered':'');
     }
-    if(msg.match(/^DONE:/)) return 'dispense complete: '+msg.slice(5)+' ml delivered';
     if(msg==='STOPPED') return 'pump stopped, all schedules disabled';
     if(msg==='PRIMING') return 'prime started, waiting for flow';
     if(msg==='RDONE') return 'prime complete, line is filled';
     if(msg==='RTIMEOUT') return 'prime timed out, no flow detected in 30 seconds';
-    if(msg==='TOK') return 'clock synced successfully';
-    if(msg==='SCOK') return 'all schedules cleared on device';
-    if(msg==='SOK') return 'schedule saved to device';
-    if(msg.match(/^V:/)) return 'pump speed set to '+msg.slice(2)+'%';
+    if(msg==='TOK') return 'clock synced';
+    if(msg==='SCOK') return null; // suppress, part of schedule push
+    if(msg==='SOK') return null; // suppress, part of schedule push
+    if(msg.match(/^V:/)) return null; // suppress speed ack
     if(msg==='ERR') return 'device received unknown command';
     if(msg==='SEMPTY') return 'no schedules on device';
-    if(msg.match(/^S\d+,/)){
-      var p=msg.slice(1).split(',');
-      return 'device schedule slot '+p[0]+': '+p[1]+' ml, interval '+p[2]+'s, '+(p[3]==='1'?'enabled':'disabled');
-    }
-    return 'device: '+msg;
+    if(msg==='') return null;
+    return null; // suppress anything unrecognized
+  }
+
+  function translateSent(cmd){
+    if(cmd.match(/^D\d+$/)) return 'dispensing '+cmd.slice(1)+' ml';
+    if(cmd==='X') return 'emergency stop';
+    if(cmd==='R') return 'priming system';
+    if(cmd.match(/^V\d+$/)) return null; // suppress speed commands
+    if(cmd.match(/^T\d/)) return null; // suppress clock sync
+    if(cmd==='SC') return null; // suppress schedule clear
+    if(cmd.match(/^S\d+,/)) return null; // suppress individual schedule pushes
+    if(cmd==='S?') return null;
+    return null;
   }
 
   function setSpeed(name){
-    currentSpeedName = name;
-    document.getElementById('speedSlow').className = 'speed-btn' + (name==='slow'?' active':'');
-    document.getElementById('speedMedium').className = 'speed-btn' + (name==='medium'?' active':'');
-    document.getElementById('speedFast').className = 'speed-btn' + (name==='fast'?' active':'');
+    currentSpeedName=name;
+    document.getElementById('speedSlow').className='speed-btn'+(name==='slow'?' active':'');
+    document.getElementById('speedMedium').className='speed-btn'+(name==='medium'?' active':'');
+    document.getElementById('speedFast').className='speed-btn'+(name==='fast'?' active':'');
     if(connected) sendCommand('V'+SPEEDS[name]);
   }
 
   function toggleSection(name){
-    const id=name.charAt(0).toUpperCase()+name.slice(1);
-    const body=document.getElementById('body'+id);
-    const caret=document.getElementById('caret'+id);
-    const header=caret.closest('.section-header');
-    const isCollapsed=body.classList.contains('collapsed');
+    var id=name.charAt(0).toUpperCase()+name.slice(1);
+    var body=document.getElementById('body'+id);
+    var caret=document.getElementById('caret'+id);
+    var header=caret.closest('.section-header');
+    var isCollapsed=body.classList.contains('collapsed');
     if(isCollapsed){
       body.style.maxHeight=body.scrollHeight+'px';
       body.classList.remove('collapsed');
       header.classList.remove('collapsed');
     }else{
       body.style.maxHeight=body.scrollHeight+'px';
-      requestAnimationFrame(()=>{
+      requestAnimationFrame(function(){
         body.style.maxHeight='0';
         body.classList.add('collapsed');
         header.classList.add('collapsed');
@@ -479,24 +458,25 @@
   }
 
   function initSections(){
-    document.querySelectorAll('.section-body').forEach(b=>{
+    document.querySelectorAll('.section-body').forEach(function(b){
       b.style.maxHeight=b.scrollHeight+'px';
     });
   }
 
   function log(msg,c){
-    const el=document.getElementById('logArea');
-    const d=document.createElement('div');
-    const t=new Date().toLocaleTimeString('en-US',{hour12:false,hour:'2-digit',minute:'2-digit',second:'2-digit'});
+    if(!msg) return;
+    var el=document.getElementById('logArea');
+    var d=document.createElement('div');
+    var t=new Date().toLocaleTimeString('en-US',{hour12:false,hour:'2-digit',minute:'2-digit',second:'2-digit'});
     d.innerHTML='<span style="opacity:0.5">'+t+'</span> <span class="'+(c?'log-'+c:'')+'">'+msg+'</span>';
     el.prepend(d);
     while(el.children.length>50)el.removeChild(el.lastChild);
   }
 
   function setStatus(state){
-    const dot=document.getElementById('statusDot');
-    const txt=document.getElementById('statusText');
-    const btn=document.getElementById('connectBtn');
+    var dot=document.getElementById('statusDot');
+    var txt=document.getElementById('statusText');
+    var btn=document.getElementById('connectBtn');
     connected=state==='connected';
     dot.className='status-dot'+(connected?' on':'');
     txt.className='status-text'+(connected?' on':'');
@@ -505,7 +485,6 @@
     document.getElementById('dispenseBtn').disabled=!connected;
     document.getElementById('primeBtn').disabled=!connected;
     document.getElementById('stopBtn').disabled=!connected;
-    document.getElementById('syncBtn').disabled=!connected;
   }
 
   async function toggleConnection(){
@@ -521,7 +500,7 @@
       device=await navigator.bluetooth.requestDevice({
         filters: [{services: [SERVICE_UUID]}]
       });
-      device.addEventListener('gattserverdisconnected',()=>{setStatus('disconnected');log('connection lost','r');});
+      device.addEventListener('gattserverdisconnected',function(){setStatus('disconnected');log('connection lost','r');});
       server=await device.gatt.connect();
       var service=await server.getPrimaryService(SERVICE_UUID);
       txChar=await service.getCharacteristic(CHAR_UUID);
@@ -529,9 +508,11 @@
       txChar.addEventListener('characteristicvaluechanged',onReceive);
       setStatus('connected');
       log('connected to '+(device.name||'device'),'g');
-      syncClock();
-      // Send current speed setting
+      // Sync clock and speed silently
+      sendCommand('T'+[new Date().getHours(),new Date().getMinutes(),new Date().getSeconds()].map(function(v){return String(v).padStart(2,'0')}).join(':'));
       sendCommand('V'+SPEEDS[currentSpeedName]);
+      // Push any existing schedules
+      if(schedules.length>0) pushSchedulesToDevice();
     }catch(err){
       setStatus('disconnected');
       if(err.name!=='NotFoundError')log('connection error: '+err.message,'r');
@@ -540,34 +521,60 @@
   }
 
   function onReceive(e){
-    const msg=new TextDecoder().decode(e.target.value).trim();
-    if(!msg)return;
-    log(translateReceived(msg), msg==='ERR'||msg==='RTIMEOUT'?'r':msg==='STOPPED'?'r':msg.startsWith('DONE')||msg==='RDONE'||msg==='TOK'||msg==='SCOK'||msg==='SOK'?'g':'');
-    const m=msg.match(/^P:(\d+)\/(\d+)$/);
-    if(m)updateProgress(parseInt(m[1]),parseInt(m[2]));
-    if(msg.startsWith('DONE')){
-      updateProgress(100,100);
-      setTimeout(()=>{document.getElementById('progressArea').classList.remove('active');},1500);
-    }
-    if(msg==='STOPPED'){
-      document.getElementById('progressArea').classList.remove('active');
+    var raw=new TextDecoder().decode(e.target.value);
+    // Split on newlines in case multiple messages arrive
+    var msgs=raw.split(/[\r\n]+/);
+    for(var i=0;i<msgs.length;i++){
+      var msg=cleanMsg(msgs[i]);
+      if(!msg) continue;
+
+      // Handle progress bar updates
+      var pm=msg.match(/^P:(\d+)\/(\d+)$/);
+      if(pm){
+        updateProgress(parseInt(pm[1]),parseInt(pm[2]));
+        continue;
+      }
+
+      // Handle DONE
+      if(msg.match(/^DONE/)){
+        var d=msg.match(/^DONE:?(\d*)/);
+        var amt=d&&d[1]?d[1]:dispenseTarget;
+        updateProgress(parseInt(amt),dispenseTarget||parseInt(amt));
+        setTimeout(function(){document.getElementById('progressArea').classList.remove('active');},1500);
+        log(translateReceived(msg),'g');
+        continue;
+      }
+
+      if(msg==='STOPPED'){
+        document.getElementById('progressArea').classList.remove('active');
+        log(translateReceived(msg),'r');
+        continue;
+      }
+
+      // Translate and log
+      var translated=translateReceived(msg);
+      if(translated){
+        var color=msg==='ERR'||msg==='RTIMEOUT'?'r':msg==='RDONE'||msg==='TOK'?'g':'';
+        log(translated,color);
+      }
     }
   }
 
   async function sendCommand(cmd){
-    if(!txChar)return;
-    await txChar.writeValue(new TextEncoder().encode(cmd+'\n'));
-    log(translateSent(cmd), cmd==='X'?'r':cmd==='R'?'y':'');
-  }
-
-  function syncClock(){
-    const n=new Date();
-    sendCommand('T'+[n.getHours(),n.getMinutes(),n.getSeconds()].map(v=>String(v).padStart(2,'0')).join(':'));
+    if(!txChar) return;
+    try{
+      await txChar.writeValue(new TextEncoder().encode(cmd+'\n'));
+      var translated=translateSent(cmd);
+      if(translated) log(translated,cmd==='X'?'r':cmd==='R'?'y':'');
+    }catch(e){
+      log('send failed: '+e.message,'r');
+    }
   }
 
   function manualDispense(){
-    const a=parseInt(document.getElementById('manualAmount').value);
+    var a=parseInt(document.getElementById('manualAmount').value);
     if(!a||a<MIN_ML){log('minimum dispense is '+MIN_ML+' ml','r');return;}
+    dispenseTarget=a;
     sendCommand('D'+a);
     updateProgress(0,a);
     document.getElementById('progressArea').classList.add('active');
@@ -583,7 +590,8 @@
   }
 
   function updateProgress(c,t){
-    const p=Math.min(100,(c/t)*100);
+    if(!t) t=1;
+    var p=Math.min(100,(c/t)*100);
     document.getElementById('progressFill').style.width=p+'%';
     document.getElementById('progressText').textContent=c+' / '+t+' ml';
   }
@@ -591,39 +599,43 @@
   function unitToSec(v,u){return v*({second:1,minute:60,hour:3600,day:86400,week:604800}[u]||1);}
 
   function addSchedule(){
-    const a=parseInt(document.getElementById('schedAmount').value);
-    const f=parseInt(document.getElementById('schedFreq').value);
-    const u=document.getElementById('schedUnit').value;
-    if(!a||a<MIN_ML||!f||f<1)return;
+    var a=parseInt(document.getElementById('schedAmount').value);
+    var f=parseInt(document.getElementById('schedFreq').value);
+    var u=document.getElementById('schedUnit').value;
+    if(!a||a<MIN_ML||!f||f<1) return;
     schedules.push({id:nextId++,amount:a,freq:f,unit:u,intervalSec:unitToSec(f,u),enabled:true});
     document.getElementById('schedAmount').value='';
     document.getElementById('schedFreq').value='';
     renderSchedules();
     if(connected) pushSchedulesToDevice();
-    const body=document.getElementById('bodySchedule');
+    log('schedule added: '+a+' ml every '+f+' '+u+(f!=1?'s':''),'g');
+    var body=document.getElementById('bodySchedule');
     if(!body.classList.contains('collapsed'))body.style.maxHeight=body.scrollHeight+'px';
   }
 
   function removeSchedule(id){
-    schedules=schedules.filter(s=>s.id!==id);
+    var s=schedules.find(function(x){return x.id===id;});
+    schedules=schedules.filter(function(x){return x.id!==id;});
     renderSchedules();
     if(connected) pushSchedulesToDevice();
-    const body=document.getElementById('bodySchedule');
+    if(s) log('schedule removed: '+s.amount+' ml','r');
+    var body=document.getElementById('bodySchedule');
     if(!body.classList.contains('collapsed'))body.style.maxHeight=body.scrollHeight+'px';
   }
 
   function toggleScheduleEntry(id){
-    const e=schedules.find(s=>s.id===id);
-    if(e)e.enabled=!e.enabled;
+    var e=schedules.find(function(s){return s.id===id;});
+    if(e) e.enabled=!e.enabled;
     renderSchedules();
     if(connected) pushSchedulesToDevice();
+    if(e) log('schedule '+(e.enabled?'enabled':'disabled')+': '+e.amount+' ml',e.enabled?'g':'y');
   }
 
   function renderSchedules(){
-    const c=document.getElementById('scheduleList');
+    var c=document.getElementById('scheduleList');
     if(!schedules.length){c.innerHTML='';return;}
-    c.innerHTML='<div class="schedule-list">'+schedules.map(s=>
-      '<div class="schedule-entry'+(s.enabled?'':' entry-disabled')+'">'+
+    c.innerHTML='<div class="schedule-list">'+schedules.map(function(s){
+      return '<div class="schedule-entry'+(s.enabled?'':' entry-disabled')+'">'+
         '<div class="entry-info">'+
           '<div class="entry-main">'+s.amount+' ml</div>'+
           '<div class="entry-sub">every '+s.freq+' '+s.unit+(s.freq!=1?'s':'')+'</div>'+
@@ -632,22 +644,19 @@
           '<button class="toggle-btn'+(s.enabled?'':' off')+'" onclick="toggleScheduleEntry('+s.id+')">'+(s.enabled?'on':'off')+'</button>'+
           '<button class="del-btn" onclick="removeSchedule('+s.id+')">x</button>'+
         '</div>'+
-      '</div>'
-    ).join('')+'</div>';
+      '</div>';
+    }).join('')+'</div>';
   }
 
   async function pushSchedulesToDevice(){
     await sendCommand('SC');
-    for(let i=0;i<schedules.length;i++){
-      const s=schedules[i];
+    for(var i=0;i<schedules.length;i++){
+      var s=schedules[i];
       await sendCommand('S'+i+','+s.amount+','+s.intervalSec+','+(s.enabled?1:0));
     }
-    syncClock();
-  }
-
-  async function syncSchedule(){
-    if(!connected)return;
-    await pushSchedulesToDevice();
+    // Sync clock
+    var n=new Date();
+    await sendCommand('T'+[n.getHours(),n.getMinutes(),n.getSeconds()].map(function(v){return String(v).padStart(2,'0')}).join(':'));
   }
 
   renderSchedules();
